@@ -65,24 +65,26 @@ const d3 = doctorIds["doctor3@test.com"];
 const p1 = patientIds["patient1@test.com"];
 
 const { data: slots, error: slotsError } = await supabase.from("slots").insert([
-  { doctor_id: d1, start_time: "2026-04-28 09:00:00+00", end_time: "2026-04-28 10:00:00+00", is_booked: true  },
-  { doctor_id: d1, start_time: "2026-04-29 10:00:00+00", end_time: "2026-04-29 11:00:00+00", is_booked: false },
-  { doctor_id: d1, start_time: "2026-05-04 09:00:00+00", end_time: "2026-05-04 10:00:00+00", is_booked: false },
-  { doctor_id: d1, start_time: "2026-05-06 11:00:00+00", end_time: "2026-05-06 12:00:00+00", is_booked: false },
-  { doctor_id: d2, start_time: "2026-04-28 11:00:00+00", end_time: "2026-04-28 12:00:00+00", is_booked: false },
-  { doctor_id: d2, start_time: "2026-04-30 09:00:00+00", end_time: "2026-04-30 10:00:00+00", is_booked: false },
-  { doctor_id: d2, start_time: "2026-05-05 10:00:00+00", end_time: "2026-05-05 11:00:00+00", is_booked: false },
-  { doctor_id: d2, start_time: "2026-05-07 09:00:00+00", end_time: "2026-05-07 10:00:00+00", is_booked: false },
-  { doctor_id: d3, start_time: "2026-04-29 09:00:00+00", end_time: "2026-04-29 10:00:00+00", is_booked: false },
-  { doctor_id: d3, start_time: "2026-04-30 11:00:00+00", end_time: "2026-04-30 12:00:00+00", is_booked: false },
-  { doctor_id: d3, start_time: "2026-05-04 11:00:00+00", end_time: "2026-05-04 12:00:00+00", is_booked: false },
-  { doctor_id: d3, start_time: "2026-05-07 10:00:00+00", end_time: "2026-05-07 11:00:00+00", is_booked: false },
+  { doctor_id: d1, start_time: "2026-04-28 09:00:00+00", end_time: "2026-04-28 10:00:00+00" },
+  { doctor_id: d1, start_time: "2026-04-29 10:00:00+00", end_time: "2026-04-29 11:00:00+00" },
+  { doctor_id: d1, start_time: "2026-05-04 09:00:00+00", end_time: "2026-05-04 10:00:00+00" },
+  { doctor_id: d1, start_time: "2026-05-06 11:00:00+00", end_time: "2026-05-06 12:00:00+00" },
+
+  { doctor_id: d2, start_time: "2026-04-28 11:00:00+00", end_time: "2026-04-28 12:00:00+00" },
+  { doctor_id: d2, start_time: "2026-04-30 09:00:00+00", end_time: "2026-04-30 10:00:00+00" },
+  { doctor_id: d2, start_time: "2026-05-05 10:00:00+00", end_time: "2026-05-05 11:00:00+00" },
+  { doctor_id: d2, start_time: "2026-05-07 09:00:00+00", end_time: "2026-05-07 10:00:00+00" },
+
+  { doctor_id: d3, start_time: "2026-04-29 09:00:00+00", end_time: "2026-04-29 10:00:00+00" },
+  { doctor_id: d3, start_time: "2026-04-30 11:00:00+00", end_time: "2026-04-30 12:00:00+00" },
+  { doctor_id: d3, start_time: "2026-05-04 11:00:00+00", end_time: "2026-05-04 12:00:00+00" },
+  { doctor_id: d3, start_time: "2026-05-07 10:00:00+00", end_time: "2026-05-07 11:00:00+00" },
 ]).select();
 
 if (slotsError) { console.error("insert slots", slotsError.message); process.exit(1); }
 console.log("created slots");
 
-const bookedSlot = slots.find((s) => s.doctor_id === d1 && s.is_booked === true);
+const bookedSlot = slots.find((s) => s.doctor_id === d1);
 
 const { error: apptError } = await supabase.from("appointments").insert({
   patient_id: p1,

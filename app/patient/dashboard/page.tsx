@@ -46,87 +46,88 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/patient/login");
-        return;
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push("/patient/login"); return; }
 
       const { data: patientData } = await supabase
-        .from("patients")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      if (!patientData) {
-        router.push("/patient/login");
-        return;
-      }
-
+        .from("patients").select("*").eq("id", user.id).single();
+      if (!patientData) { router.push("/patient/login"); return; }
       setPatient(patientData);
 
-      const { data: slotsData } = await supabase
+      // Get all booked slot IDs from active appointments
+      const { data: bookedAppointments } = await supabase
+        .from("appointments")
+        .select("slot_id")
+        .in("status", ["active","done"]);
+
+      const bookedSlotIds = (bookedAppointments ?? []).map((a) => a.slot_id);
+
+      // Get all slots, then filter out booked ones on the client
+      const now = new Date().toISOString();
+      const { data: allSlots } = await supabase
         .from("slots")
         .select("id, start_time, end_time, doctors(id, name, specialty)")
-        .eq("is_booked", false)
+        .gte("start_time", now)
         .order("start_time");
 
-      setAvailableSlots((slotsData as AvailableSlot[]) ?? []);
+      const available = (allSlots ?? []).filter(
+        (s) => !bookedSlotIds.includes(s.id)
+      );
+      setAvailableSlots(available as AvailableSlot[]);
 
       const { data: apptData } = await supabase
         .from("appointments")
-        .select(
-          "id, status, slots(start_time, end_time), doctors(name, specialty)"
-        )
+        .select("id, status, slots(start_time, end_time), doctors(name, specialty)")
         .eq("patient_id", user.id)
         .order("created_at", { ascending: false });
 
       setMyAppointments((apptData as MyAppointment[]) ?? []);
       setLoading(false);
     }
-
     load();
   }, [router]);
 
   async function handleBook(slotId: string, doctorId: string) {
     setActionMsg("");
     setBookingSlotId(slotId);
-
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    
     const res = await fetch("/api/appointments/book", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session?.access_token}`
+      },
       body: JSON.stringify({ slotId, doctorId }),
     });
     const data = await res.json();
-
     if (res.ok) {
       setActionMsg("Appointment booked successfully!");
       setAvailableSlots((prev) => prev.filter((s) => s.id !== slotId));
     } else {
       setActionMsg(data.error ?? "Booking failed.");
     }
-
     setBookingSlotId(null);
   }
 
   async function handleCancel(appointmentId: string) {
     setActionMsg("");
+    const { data: { session } } = await supabase.auth.getSession();
+
     const res = await fetch("/api/appointments/cancel", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session?.access_token}`
+      },
       body: JSON.stringify({ appointmentId, action: "cancel" }),
     });
     const data = await res.json();
-
     if (res.ok) {
       setActionMsg("Appointment cancelled.");
       setMyAppointments((prev) =>
-        prev.map((a) =>
-          a.id === appointmentId ? { ...a, status: "cancelled" } : a
-        )
+        prev.map((a) => a.id === appointmentId ? { ...a, status: "cancelled" } : a)
       );
     } else {
       setActionMsg(data.error ?? "Cancellation failed.");
@@ -151,16 +152,17 @@ export default function PatientDashboard() {
       <div className="mx-auto max-w-4xl">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold">{patient?.name}</h1>
-          <button
-            onClick={handleLogout}
-            className="rounded-lg border px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
-          >
+          <button onClick={handleLogout} className="rounded-lg border px-4 py-2 text-sm text-gray-600 hover:bg-gray-100">
             Logout
           </button>
         </div>
 
         {actionMsg && (
-          <p className="mb-4 rounded-lg bg-green-50 px-4 py-2 text-sm text-green-700">
+          <p className={`mb-4 rounded-lg px-4 py-2 text-sm ${
+            actionMsg.includes("success") || actionMsg.includes("booked") || actionMsg.includes("cancelled")
+              ? "bg-green-50 text-green-700"
+              : "bg-red-50 text-red-700"
+          }`}>
             {actionMsg}
           </p>
         )}
@@ -184,20 +186,14 @@ export default function PatientDashboard() {
                   {availableSlots.map((slot) => (
                     <tr key={slot.id}>
                       <td className="px-4 py-3">{slot.doctors?.name}</td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {slot.doctors?.specialty}
-                      </td>
+                      <td className="px-4 py-3 text-gray-500">{slot.doctors?.specialty}</td>
                       <td className="px-4 py-3">
                         {formatDateTime(slot.start_time)} —{" "}
-                        {new Date(slot.end_time).toLocaleTimeString("en-IN", {
-                          timeStyle: "short",
-                        })}
+                        {new Date(slot.end_time).toLocaleTimeString("en-IN", { timeStyle: "short" })}
                       </td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() =>
-                            handleBook(slot.id, slot.doctors?.id)
-                          }
+                          onClick={() => handleBook(slot.id, slot.doctors?.id)}
                           disabled={bookingSlotId === slot.id}
                           className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
                         >
@@ -232,23 +228,15 @@ export default function PatientDashboard() {
                     <tr key={appt.id}>
                       <td className="px-4 py-3">
                         <div>{appt.doctors?.name}</div>
-                        <div className="text-xs text-gray-400">
-                          {appt.doctors?.specialty}
-                        </div>
+                        <div className="text-xs text-gray-400">{appt.doctors?.specialty}</div>
                       </td>
+                      <td className="px-4 py-3">{formatDateTime(appt.slots?.start_time)}</td>
                       <td className="px-4 py-3">
-                        {formatDateTime(appt.slots?.start_time)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            appt.status === "active"
-                              ? "bg-blue-100 text-blue-700"
-                              : appt.status === "done"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          appt.status === "active" ? "bg-blue-100 text-blue-700"
+                          : appt.status === "done" ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-600"
+                        }`}>
                           {appt.status}
                         </span>
                       </td>
