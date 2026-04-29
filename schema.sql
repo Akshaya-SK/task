@@ -27,18 +27,19 @@ CREATE TABLE IF NOT EXISTS appointments (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id UUID        NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   doctor_id  UUID        NOT NULL REFERENCES doctors(id)  ON DELETE CASCADE,
-  slot_id    UUID        NOT NULL UNIQUE REFERENCES slots(id) ON DELETE CASCADE,
+  slot_id    UUID        NOT NULL REFERENCES slots(id) ON DELETE CASCADE,
+  -- no UNIQUE on slot_id: cancelled slots can be rebooked
   status     TEXT        NOT NULL DEFAULT 'active'
                          CHECK (status IN ('active', 'done', 'cancelled')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- One active appointment per patient per doctor
+-- Prevents one patient from having two active appointments with same doctor
 CREATE UNIQUE INDEX IF NOT EXISTS unique_active_patient_doctor
 ON appointments (patient_id, doctor_id)
 WHERE status = 'active';
 
--- Admin = role table (no passwords)
+-- Admin table links to auth.users
 CREATE TABLE IF NOT EXISTS system_admins (
   id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL UNIQUE
@@ -48,11 +49,11 @@ CREATE TABLE IF NOT EXISTS system_admins (
 -- ENABLE RLS
 -- ========================
 
-ALTER TABLE doctors       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE patients      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE slots         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointments  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE system_admins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE doctors        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE patients       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE slots          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointments   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_admins  ENABLE ROW LEVEL SECURITY;
 
 -- ========================
 -- READ POLICIES
@@ -67,11 +68,9 @@ FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "slots_read_all" ON slots
 FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY "appointments_read_patient" ON appointments
-FOR SELECT USING (auth.uid() = patient_id);
-
-CREATE POLICY "appointments_read_doctor" ON appointments
-FOR SELECT USING (auth.uid() = doctor_id);
+-- All authenticated users can read appointments (needed for slot availability check)
+CREATE POLICY "authenticated_read_appointments" ON appointments
+FOR SELECT USING (auth.role() = 'authenticated');
 
 -- ========================
 -- WRITE POLICIES
@@ -95,29 +94,16 @@ USING (auth.uid() = doctor_id);
 
 CREATE POLICY "admin_full_access_appointments" ON appointments
 FOR ALL
-USING (
-  EXISTS (
-    SELECT 1 FROM system_admins
-    WHERE id = auth.uid()
-  )
-);
+USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
 
 CREATE POLICY "admin_read_doctors" ON doctors
-FOR SELECT USING (
-  EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid())
-);
+FOR SELECT USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
 
 CREATE POLICY "admin_read_patients" ON patients
-FOR SELECT USING (
-  EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid())
-);
+FOR SELECT USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
 
 CREATE POLICY "admin_read_slots" ON slots
-FOR SELECT USING (
-  EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid())
-);
+FOR SELECT USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
 
-DROP POLICY IF EXISTS "patient_read_own_appointments" ON appointments;
-
-CREATE POLICY "authenticated_read_appointments" ON appointments
-FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "admin_read_self" ON system_admins
+FOR SELECT USING (auth.uid() = id);
