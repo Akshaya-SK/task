@@ -17,6 +17,12 @@ export default function Home() {
         >
           Patient Login
         </Link>
+        <Link
+          href="/admin/login"
+          className="rounded-lg bg-pink-600 px-6 py-3 font-medium text-white hover:bg-pink-700"
+        >
+          Admin Login
+        </Link>
       </div>
     </main>
   );
