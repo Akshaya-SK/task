@@ -28,18 +28,29 @@ CREATE TABLE IF NOT EXISTS appointments (
   patient_id UUID        NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   doctor_id  UUID        NOT NULL REFERENCES doctors(id)  ON DELETE CASCADE,
   slot_id    UUID        NOT NULL REFERENCES slots(id) ON DELETE CASCADE,
-  -- no UNIQUE on slot_id: cancelled slots can be rebooked
   status     TEXT        NOT NULL DEFAULT 'active'
                          CHECK (status IN ('active', 'done', 'cancelled')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Prevents one patient from having two active appointments with same doctor
+-- ========================
+-- INDEXES (CRITICAL)
+-- ========================
+
+-- Prevent double booking of slot (only active/done matter)
+CREATE UNIQUE INDEX IF NOT EXISTS unique_active_slot
+ON appointments (slot_id)
+WHERE status IN ('active', 'done');
+
+-- Prevent multiple active appointments with same doctor
 CREATE UNIQUE INDEX IF NOT EXISTS unique_active_patient_doctor
 ON appointments (patient_id, doctor_id)
 WHERE status = 'active';
 
--- Admin table links to auth.users
+-- ========================
+-- ADMIN TABLE
+-- ========================
+
 CREATE TABLE IF NOT EXISTS system_admins (
   id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL UNIQUE
@@ -59,51 +70,81 @@ ALTER TABLE system_admins  ENABLE ROW LEVEL SECURITY;
 -- READ POLICIES
 -- ========================
 
-CREATE POLICY "doctors_read_all" ON doctors
-FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "doctors_read_all"
+ON doctors FOR SELECT
+USING (auth.role() = 'authenticated');
 
-CREATE POLICY "patients_read_own" ON patients
-FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "patients_read_own"
+ON patients FOR SELECT
+USING (auth.uid() = id);
 
-CREATE POLICY "slots_read_all" ON slots
-FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "slots_read_all"
+ON slots FOR SELECT
+USING (auth.role() = 'authenticated');
 
--- All authenticated users can read appointments (needed for slot availability check)
-CREATE POLICY "authenticated_read_appointments" ON appointments
-FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "appointments_read_patient"
+ON appointments FOR SELECT
+USING (auth.uid() = patient_id);
+
+CREATE POLICY "appointments_read_doctor"
+ON appointments FOR SELECT
+USING (auth.uid() = doctor_id);
 
 -- ========================
 -- WRITE POLICIES
 -- ========================
 
-CREATE POLICY "appointments_insert_patient" ON appointments
-FOR INSERT
+CREATE POLICY "appointments_insert_patient"
+ON appointments FOR INSERT
 WITH CHECK (auth.uid() = patient_id);
 
-CREATE POLICY "appointments_update_patient" ON appointments
-FOR UPDATE
+CREATE POLICY "appointments_update_patient"
+ON appointments FOR UPDATE
 USING (auth.uid() = patient_id);
 
-CREATE POLICY "appointments_update_doctor" ON appointments
-FOR UPDATE
+CREATE POLICY "appointments_update_doctor"
+ON appointments FOR UPDATE
 USING (auth.uid() = doctor_id);
 
 -- ========================
 -- ADMIN POLICIES
 -- ========================
 
-CREATE POLICY "admin_full_access_appointments" ON appointments
-FOR ALL
-USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
+CREATE POLICY "admin_full_access_appointments"
+ON appointments FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM system_admins
+    WHERE id = auth.uid()
+  )
+);
 
-CREATE POLICY "admin_read_doctors" ON doctors
-FOR SELECT USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
+CREATE POLICY "admin_read_doctors"
+ON doctors FOR SELECT
+USING (
+  EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid())
+);
 
-CREATE POLICY "admin_read_patients" ON patients
-FOR SELECT USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
+CREATE POLICY "admin_read_patients"
+ON patients FOR SELECT
+USING (
+  EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid())
+);
 
-CREATE POLICY "admin_read_slots" ON slots
-FOR SELECT USING (EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid()));
+CREATE POLICY "admin_read_slots"
+ON slots FOR SELECT
+USING (
+  EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid())
+);
 
-CREATE POLICY "admin_read_self" ON system_admins
-FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "admin_read_self"
+ON system_admins FOR SELECT
+USING (auth.uid() = id);
+
+-- ========================
+-- OPTIONAL ADMIN SEED
+-- ========================
+
+INSERT INTO system_admins (id, email)
+SELECT id, email FROM auth.users WHERE email = 'admin@test.com'
+ON CONFLICT (email) DO NOTHING;

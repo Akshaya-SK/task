@@ -222,7 +222,7 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3 text-gray-500">{doc.email}</td>
                     <td className="px-4 py-3">{doc.specialty}</td>
                     <td className="px-4 py-3">
-                      {appointments.filter(a => a.doctors?.name === doc.name).length}
+                      {appointments.filter(a => a.doctor_id === doc.id).length}
                     </td>
                   </tr>
                 ))}
@@ -248,7 +248,7 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3 font-medium">{pat.name}</td>
                     <td className="px-4 py-3 text-gray-500">{pat.email}</td>
                     <td className="px-4 py-3">
-                      {appointments.filter(a => a.patients?.name === pat.name).length}
+                      {appointments.filter(a.patient === pat.id).length}
                     </td>
                   </tr>
                 ))}
@@ -270,7 +270,7 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y">
                 {slots.map((slot) => {
-                  const appt = appointments.find(a => a.slots?.start_time === slot.start_time);
+                  const appt = appointments.find(a => a.slot_id === slot.id);
                   const status = appt ? appt.status : "available";
                   return (
                     <tr key={slot.id}>

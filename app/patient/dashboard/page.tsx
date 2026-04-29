@@ -64,16 +64,29 @@ export default function PatientDashboard() {
 
       // Get all slots, then filter out booked ones on the client
       const now = new Date().toISOString();
-      const { data: allSlots } = await supabase
+
+      let query = supabase
         .from("slots")
-        .select("id, start_time, end_time, doctors(id, name, specialty)")
+        .select(`
+          id, start_time, end_time,
+          doctors(id, name, specialty)
+        `)
         .gte("start_time", now)
         .order("start_time");
 
-      const available = (allSlots ?? []).filter(
-        (s) => !bookedSlotIds.includes(s.id)
-      );
-      setAvailableSlots(available as AvailableSlot[]);
+      if (bookedSlotIds.length > 0) {
+        query = query.not("id", "in", `(${bookedSlotIds.join(",")})`);
+      }
+
+      const { data: allSlots } = await query;
+
+      setAvailableSlots((allSlots as AvailableSlot[]) ?? []);
+
+      // const available = (allSlots ?? []).filter(
+      //   (s) => !bookedSlotIds.includes(s.id)
+      // );
+      // setAvailableSlots(available as AvailableSlot[]);
+      setAvailableSlots((allSlots as AvailableSlot[]) ?? []);
 
       const { data: apptData } = await supabase
         .from("appointments")
@@ -194,7 +207,10 @@ export default function PatientDashboard() {
                       <td className="px-4 py-3">
                         <button
                           onClick={() => handleBook(slot.id, slot.doctors?.id)}
-                          disabled={bookingSlotId === slot.id}
+                          disabled={
+                            bookingSlotId === slot.id ||
+                            new Date(slot.start_time) < new Date()
+                          }
                           className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
                         >
                           {bookingSlotId === slot.id ? "Booking..." : "Book"}
@@ -224,34 +240,51 @@ export default function PatientDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {myAppointments.map((appt) => (
-                    <tr key={appt.id}>
-                      <td className="px-4 py-3">
-                        <div>{appt.doctors?.name}</div>
-                        <div className="text-xs text-gray-400">{appt.doctors?.specialty}</div>
-                      </td>
-                      <td className="px-4 py-3">{formatDateTime(appt.slots?.start_time)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          appt.status === "active" ? "bg-blue-100 text-blue-700"
-                          : appt.status === "done" ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
-                        }`}>
-                          {appt.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {appt.status === "active" && (
-                          <button
-                            onClick={() => handleCancel(appt.id)}
-                            className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700"
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {myAppointments.map((appt) => {
+                    const isPast = new Date(appt.slots.start_time) < new Date();
+
+                    const displayStatus =
+                      appt.status === "active" && isPast
+                        ? "expired"
+                        : appt.status;
+
+                    return (
+                      <tr key={appt.id}>
+                        <td className="px-4 py-3">
+                          <div>{appt.doctors?.name}</div>
+                          <div className="text-xs text-gray-400">
+                            {appt.doctors?.specialty}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {formatDateTime(appt.slots?.start_time)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            displayStatus === "active"
+                              ? "bg-blue-100 text-blue-700"
+                              : displayStatus === "done"
+                              ? "bg-green-100 text-green-700"
+                              : displayStatus === "expired"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {displayStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {appt.status === "active" && !isPast && (
+                            <button
+                              onClick={() => handleCancel(appt.id)}
+                              className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
