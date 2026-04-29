@@ -116,3 +116,8 @@ CREATE POLICY "admin_read_slots" ON slots
 FOR SELECT USING (
   EXISTS (SELECT 1 FROM system_admins WHERE id = auth.uid())
 );
+
+DROP POLICY IF EXISTS "patient_read_own_appointments" ON appointments;
+
+CREATE POLICY "authenticated_read_appointments" ON appointments
+FOR SELECT USING (auth.role() = 'authenticated');
